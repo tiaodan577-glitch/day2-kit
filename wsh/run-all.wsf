@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!-- run-all.wsf: single-file WSH suite (wscript/cscript). Includes VBS + JScript enum. -->
+<job id="day2enum">
+<script language="VBScript" type="text/vbscript">
+Option Explicit
+Dim fso, out, wmi, sh
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set sh = CreateObject("WScript.Shell")
+Set out = fso.CreateTextFile(sh.ExpandEnvironmentStrings("%TEMP%") & "\enum-wsf.txt", True)
+out.WriteLine "[*] run-all.wsf " & Now
+
+Sub Dump(title, wql)
+  Dim res, item, p, line
+  out.WriteLine ""
+  out.WriteLine "=== " & title & " ==="
+  On Error Resume Next
+  Set wmi = GetObject("winmgmts:\\.\root\cimv2")
+  Set res = wmi.ExecQuery(wql)
+  For Each item In res
+    line = ""
+    For Each p In item.Properties_
+      If Not IsNull(p.Value) Then line = line & p.Name & "=" & p.Value & " | "
+    Next
+    out.WriteLine line
+  Next
+  If Err.Number <> 0 Then out.WriteLine "ERR " & Err.Description
+  On Error GoTo 0
+End Sub
+
+Sub RunCmd(title, cmd)
+  Dim e
+  out.WriteLine ""
+  out.WriteLine "=== " & title & " ==="
+  On Error Resume Next
+  Set e = sh.Exec("cmd /c " & cmd)
+  Do While e.Status = 0
+    WScript.Sleep 100
+  Loop
+  out.WriteLine e.StdOut.ReadAll()
+  If Err.Number <> 0 Then out.WriteLine "ERR " & Err.Description
+  On Error GoTo 0
+End Sub
+
+Dump "OS", "SELECT Caption,Version,BuildNumber,OSArchitecture,LastBootUpTime FROM Win32_OperatingSystem"
+Dump "Users", "SELECT Name,Disabled,Lockout,PasswordExpires FROM Win32_UserAccount WHERE LocalAccount=True"
+Dump "Groups", "SELECT Name FROM Win32_Group WHERE LocalAccount=True"
+Dump "Services", "SELECT Name,State,StartMode,StartName,PathName FROM Win32_Service"
+Dump "NetIPConfig", "SELECT Description,IPAddress,DefaultIPGateway,MACAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=True"
+RunCmd "whoami /all", "whoami /all"
+RunCmd "net localgroup administrators", "net localgroup administrators"
+RunCmd "netstat -ano", "netstat -ano"
+RunCmd "ipconfig /all", "ipconfig /all"
+RunCmd "route print", "route print"
+
+out.WriteLine ""
+out.WriteLine "[+] done " & Now
+out.Close
+WScript.Echo "[+] saved %TEMP%\enum-wsf.txt (via run-all.wsf)"
+</script>
+</job>

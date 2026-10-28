@@ -25,8 +25,12 @@ day2-kit/
 ├─ ps1/          PowerShell 载荷
 │   ├─ Get-LocalRecon.ps1  自写轻量侦察（无已知工具特征）
 │   ├─ Load-Assembly.ps1   内存加载 .NET 程序集（execute-assembly 等价物）
-│   ├─ Invoke-Suite.ps1    一键跑已备工具（PowerUp/JAWS/SessionGopher/PowerView/SharpHound）
+│   ├─ InMem-Asm.ps1       base64→内存程序集加载器（自写，无已知特征）
+│   ├─ Invoke-Suite.ps1    一键跑已备工具（默认走 tools-obf）
 │   └─ Get-Kit.ps1         纯文本拉取器（下载被拦时用 raw 逐文件取全套）
+├─ tools/        工具原版（留档对照，别在目标机加载——会被特征杀）
+├─ tools-obf/    ★实际使用：变形版（注释剥离+内部函数改名）+ SharpHound.exe.b64
+├─ build/        obfuscate_ps.py（变形器，Mac 侧重建用）
 ├─ tools/        已下载工具源（供内存加载，勿直接双击 exe）
 │   ├─ PowerUp.ps1 / PowerView.ps1 / jaws-enum.ps1 / SessionGopher.ps1 / PrivescCheck.ps1
 │   └─ sharphound/SharpHound.ps1（内嵌程序集版，无 exe）
@@ -81,6 +85,20 @@ day2-kit/
 
 3. **热点 HTTP 兜底（Day1 已验证）**：攻击机 `python3 -m http.server 8000`（只绑热点网段），
    测试机 PowerShell 从热点地址拉 zip/逐文件，完全不走客户出网设备。
+
+## 脚本被杀时怎么办（分诊）
+
+被杀有两层，对策不同：
+
+| 现象 | 层 | 对策 |
+|---|---|---|
+| 刚下完/落地就被删（PowerUp.ps1 等消失） | Trellix 文件特征 | **只取 tools-obf/**（已变形），或走热点通道（不出网关） |
+| 落地还在，一执行就被拦/进程被杀 | AMSI 脚本内容特征 | 同上用变形版；或改走 `InMem-Asm`（程序集不经 AMSI）；或退到 bat/WSH 通道 |
+| 进程被杀且有 XDR 告警弹出 | 行为特征 | 停手，对照红线，跟客户对齐后再动 |
+| PrivescCheck 仍被杀 | 其发行版本身是打包壳，壳被记了特征 | 改用 PowerUp（变形版）+ 自写 Get-LocalRecon，别死磕 |
+
+工程原则：**能用自写的就别用知名的；能当程序集进内存的就别当脚本执行；**
+变形版的入口函数名保留（Invoke-AllChecks / Invoke-SessionGopher / Get-Domain* ），调用方式不变。
 
 ## 红线（EDR 敏感，先报备再动）
 
